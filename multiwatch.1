@@ -1,0 +1,40 @@
+.TH multiwatch 1 "March  24, 2009"
+.SH NAME
+multiwatch \- forks and watches multiple instances of a program in the same environment
+.SH SYNOPSIS
+.B multiwatch
+[options] -- <application> [app arguments]
+
+.B multiwatch
+\-v
+
+.B multiwatch
+\-\-help | \-?
+.SH DESCRIPTION
+\fImultiwatch\fP is used to fork and watch multiple fastcgi backends.
+.SH OPTIONS
+.TP 8
+.B \-f, \-\-forks=childs
+Number of childs to fork and watch(default 1)
+.TP 8
+.B \-r, --retry=retries
+Number of retries to fork a single child
+.TP 8
+.B \-t, --timeout=msecs
+Retry timeout in ms; if the child dies after the timeout the retry counter is reset
+.TP 8
+.B \-?, --help
+General usage instructions
+.TP 8
+.B \-v, --version
+Show version
+.SH EXAMPLE
+.TP 8
+Spawn 2 rails instances on the same fastcgi socket (and supervise them):
+.RS 8
+.B spawn-fcgi -s /tmp/fastcgi-php.sock -C 0 -n /usr/bin/multiwatch -f 2 /home/rails/public/dispatch.fcgi
+.RE
+.SH SEE ALSO
+spawn-fcgi(1)
+.SH AUTHOR
+Stefan Buehler <stbuehler@web.de>.

@@ -32,7 +32,7 @@ Show version
 .TP 8
 Spawn 2 rails instances on the same fastcgi socket (and supervise them):
 .RS 8
-.B spawn-fcgi -s /tmp/fastcgi-php.sock -C 0 -n /usr/bin/multiwatch -f 2 /home/rails/public/dispatch.fcgi
+.B spawn-fcgi -s /tmp/fastcgi-rails.sock -C 0 -n /usr/bin/multiwatch -f 2 /home/rails/public/dispatch.fcgi
 .RE
 .SH SEE ALSO
 spawn-fcgi(1)

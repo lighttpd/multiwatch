@@ -113,6 +113,17 @@ static void spawn(child* c) {
 		break;
 	case 0:
 		/* child */
+
+		/* Need to reset the signal mask; signal actions don't need to be reset
+		 * according to libev documentation:
+		 * http://pod.tst.eu/http://cvs.schmorp.de/libev/ev.pod#The_special_problem_of_inheritance_o
+		 */
+		{
+			sigset_t set;
+			sigemptyset(&set);
+			sigprocmask(SIG_SETMASK, &set, NULL);
+		}
+
 		execv(opts.app[0], opts.app);
 		g_printerr("Exec failed: %s\n", g_strerror(errno));
 		exit(errno);

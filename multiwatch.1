@@ -1,4 +1,4 @@
-.TH multiwatch 1 "March  24, 2009"
+.TH multiwatch 1 "September  17, 2010"
 .SH NAME
 multiwatch \- forks and watches multiple instances of a program in the same environment
 .SH SYNOPSIS
@@ -11,28 +11,38 @@ multiwatch \- forks and watches multiple instances of a program in the same envi
 .B multiwatch
 \-\-help | \-?
 .SH DESCRIPTION
-\fImultiwatch\fP is used to fork and watch multiple fastcgi backends.
+\fImultiwatch\fP is used to fork and watch multiple FastCGI backends.
 .SH OPTIONS
 .TP 8
-.B \-f, \-\-forks=childs
-Number of childs to fork and watch(default 1)
+.B \-f, \-\-forks=children
+Number of children to fork and watch (default 1)
 .TP 8
 .B \-r, --retry=retries
-Number of retries to fork a single child
+Number of retries to fork a single child (default 3)
 .TP 8
 .B \-t, --timeout=msecs
-Retry timeout in ms; if the child dies after the timeout the retry counter is reset
+Retry timeout in ms; if the child dies after the timeout the retry counter is reset (default 10000 ms = 10 s)
+.TP 8
+.B \-s, --signal=signame
+Signal to send to children to signal 'graceful' termination (HUP,INT,QUIT,TERM,USR1,USR2, default is USR1)
 .TP 8
 .B \-?, --help
 General usage instructions
 .TP 8
 .B \-v, --version
-Show version
+Show version and exit
+.SH SIGNAL HANDLING
+multiwatch will forward the signal USR2; if it receives HUP,INT,QUIT,TERM or USR1, it will send the
+signal from --signal to the children; if it receives another signal from that group, it will forward the
+signal again.
+
+A signal of the group HUP,INT,QUIT,TERM and USR1 tells multiwatch to go into "shutdown" mode, so it won't
+restart children after receiving it.
 .SH EXAMPLE
 .TP 8
-Spawn 2 rails instances on the same fastcgi socket (and supervise them):
+Spawn 2 rails instances on the same FastCGI socket (and supervise them):
 .RS 8
-.B spawn-fcgi -s /tmp/fastcgi-rails.sock -n /usr/bin/multiwatch -f 2 /home/rails/public/dispatch.fcgi
+.B spawn-fcgi -s /tmp/fastcgi-rails.sock -n -- /usr/bin/multiwatch -f 2 /home/rails/public/dispatch.fcgi
 .RE
 .SH SEE ALSO
 spawn-fcgi(1)

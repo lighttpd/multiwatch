@@ -4,6 +4,7 @@
 
 #include <signal.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -16,7 +17,7 @@
 
 #define UNUSED(x) ((void)(x))
 
-#define PACKAGE_DESC (PACKAGE_NAME "-" PACKAGE_VERSION " - forks and watches multiple instances of a program in the same environment")
+#define PACKAGE_DESC (PACKAGE_NAME " v" PACKAGE_VERSION " - forks and watches multiple instances of a program in the same environment")
 
 typedef struct {
 	gchar **app;
@@ -33,6 +34,9 @@ typedef struct {
 	gint retry_timeout_ms;
 
 	gboolean show_version;
+
+	/* terminate signal to kill children */
+	gint sig_nice_kill;
 } options;
 
 struct data;
@@ -51,7 +55,7 @@ struct child {
 };
 
 struct data {
-	child *childs;
+	child *children;
 	guint running;
 	gboolean shutdown;
 	struct ev_loop *loop;
@@ -60,12 +64,42 @@ struct data {
 };
 
 static options opts = {
-	NULL,
-	1,
-	3,
-	10000,
-	FALSE
+	/* app:     */ NULL,
+	/* forks:   */ 1,
+	/* retry:   */ 3,
+	/* timeout: */ 10000,
+	/* version: */ FALSE,
+	/* sig:     */ SIGUSR1
 };
+
+typedef struct signal_action signal_action;
+struct signal_action {
+	const char *signame;
+	int signum;
+	gboolean terminate; /* not used yet */
+};
+
+static signal_action signal_actions[] = {
+	{ "HUP", SIGHUP, TRUE },
+	{ "INT", SIGINT, TRUE },
+	{ "QUIT", SIGQUIT, TRUE },
+	{ "TERM", SIGTERM, TRUE },
+	{ "USR1", SIGUSR1, TRUE },
+	{ "USR2", SIGUSR2, FALSE },
+	{ NULL, 0, FALSE }
+};
+
+static gint signame2num(const char *name) {
+	gint i;
+
+	for (i = 0; signal_actions[i].signame; i++) {
+		if (0 == strcmp(signal_actions[i].signame, name)) {
+			return i;
+		}
+	}
+
+	return -1;
+}
 
 static void forward_sig_cb(struct ev_loop *loop, ev_signal *w, int revents) {
 	data *d = (data*) w->data;
@@ -73,24 +107,31 @@ static void forward_sig_cb(struct ev_loop *loop, ev_signal *w, int revents) {
 	UNUSED(revents);
 
 	for (gint i = 0; i < opts.forks; i++) {
-		if (d->childs[i].pid != -1) {
-			kill(d->childs[i].pid, w->signum);
+		if (d->children[i].pid != -1) {
+			kill(d->children[i].pid, w->signum);
 		}
 	}
 }
 
 static void terminate_forward_sig_cb(struct ev_loop *loop, ev_signal *w, int revents) {
 	data *d = (data*) w->data;
+	gint signum = opts.sig_nice_kill; /* terminate children with "nice" signal */
 	UNUSED(loop);
 	UNUSED(revents);
 
+	/* on second signal forward original signal */
+	if (d->shutdown || signum < 0) {
+		signum = w->signum;
+	}
 	d->shutdown = TRUE;
+	opts.sig_nice_kill = -1;
 
 	for (gint i = 0; i < opts.forks; i++) {
-		if (d->childs[i].pid != -1) {
-			kill(d->childs[i].pid, w->signum);
+		if (d->children[i].pid != -1) {
+			kill(d->children[i].pid, signum);
 		}
 	}
+
 }
 
 static void spawn(child* c) {
@@ -152,17 +193,32 @@ static void child_died(struct ev_loop *loop, ev_child *w, int revents) {
 		g_printerr("Child[%i] died, respawn\n", c->id);
 		c->tries = 0;
 	} else {
-		g_printerr("Spawing child[%i] failed, next try\n", c->id);
+		g_printerr("Spawning child[%i] failed, next try\n", c->id);
 	}
 
 	spawn(c);
 }
 
+static gboolean parse_use_signal_arg(const gchar *option_name, const gchar *value, gpointer d, GError **error) {
+	gint sig = signame2num(value);
+	UNUSED(option_name);
+	UNUSED(d);
+
+	if (-1 == sig) {
+		g_set_error(error, G_OPTION_ERROR, G_OPTION_ERROR_FAILED, "Unknown signal name: '%s'", value);
+		return FALSE;
+	}
+
+	opts.sig_nice_kill = sig;
+	return TRUE;
+}
+
 static const GOptionEntry entries[] = {
-	{ "forks", 'f', 0, G_OPTION_ARG_INT, &opts.forks, "Number of childs to fork and watch(default 1)", "childs" },
-	{ "retry", 'r', 0, G_OPTION_ARG_INT, &opts.retry, "Number of retries to fork a single child", "retries" },
-	{ "timeout", 't', 0, G_OPTION_ARG_INT, &opts.retry_timeout_ms, "Retry timeout in ms; if the child dies after the timeout the retry counter is reset", "ms" },
+	{ "forks", 'f', 0, G_OPTION_ARG_INT, &opts.forks, "Number of children to fork and watch (default 1)", "children" },
+	{ "retry", 'r', 0, G_OPTION_ARG_INT, &opts.retry, "Number of retries to fork a single child (default 3)", "retries" },
+	{ "timeout", 't', 0, G_OPTION_ARG_INT, &opts.retry_timeout_ms, "Retry timeout in ms; if the child dies after the timeout the retry counter is reset (default 10000)", "ms" },
 	{ "version", 'v', 0, G_OPTION_ARG_NONE, &opts.show_version, "Show version", NULL },
+	{ "signal", 's', 0, G_OPTION_ARG_CALLBACK, (void*)(intptr_t)parse_use_signal_arg, "Signal to send to children to signal 'graceful' termination (HUP,INT,QUIT,TERM,USR1,USR2)", "signame" },
 	{ G_OPTION_REMAINING, 0, 0, G_OPTION_ARG_STRING_ARRAY, &opts.app, "<application> [app arguments]", NULL },
 	{ NULL, 0, 0, 0, NULL, NULL, NULL }
 };
@@ -208,7 +264,7 @@ int main(int argc, char **argv) {
 	}
 
 	data *d = g_slice_new0(data);
-	d->childs = (child*) g_slice_alloc0(sizeof(child) * opts.forks);
+	d->children = (child*) g_slice_alloc0(sizeof(child) * opts.forks);
 	d->running = 0;
 	d->shutdown = FALSE;
 	d->return_status = 0;
@@ -222,25 +278,25 @@ int main(int argc, char **argv) {
 	WATCH_TERM_SIG(INT);
 	WATCH_TERM_SIG(QUIT);
 	WATCH_TERM_SIG(TERM);
-	WATCH_SIG(USR1);
+	WATCH_TERM_SIG(USR1);
 	WATCH_SIG(USR2);
 
 	for (gint i = 0; i < opts.forks; i++) {
-		d->childs[i].d = d;
-		d->childs[i].id = i;
-		d->childs[i].pid = -1;
-		d->childs[i].tries = 0;
-		d->childs[i].watcher.data = &d->childs[i];
-		ev_child_init(&d->childs[i].watcher, child_died, -1, 0);
+		d->children[i].d = d;
+		d->children[i].id = i;
+		d->children[i].pid = -1;
+		d->children[i].tries = 0;
+		d->children[i].watcher.data = &d->children[i];
+		ev_child_init(&d->children[i].watcher, child_died, -1, 0);
 
-		spawn(&d->childs[i]);
+		spawn(&d->children[i]);
 	}
 
 	ev_loop(d->loop, 0);
 
 	res = d->return_status;
 
-	g_slice_free1(sizeof(child) * opts.forks, d->childs);
+	g_slice_free1(sizeof(child) * opts.forks, d->children);
 	g_slice_free(data, d);
 
 	UNWATCH_SIG(HUP);

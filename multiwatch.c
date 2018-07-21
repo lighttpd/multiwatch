@@ -94,7 +94,7 @@ static gint signame2num(const char *name) {
 
 	for (i = 0; signal_actions[i].signame; i++) {
 		if (0 == strcmp(signal_actions[i].signame, name)) {
-			return i;
+			return signal_actions[i].signum;
 		}
 	}
 

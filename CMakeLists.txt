@@ -27,6 +27,21 @@ IF("${CMAKE_BUILD_TYPE}" STREQUAL "")
 	SET(CMAKE_BUILD_TYPE RelWithDebInfo CACHE STRING "Choose the type of build, options are: None(CMAKE_CXX_FLAGS or CMAKE_C_FLAGS used) Debug Release RelWithDebInfo MinSizeRel." FORCE)
 ENDIF("${CMAKE_BUILD_TYPE}" STREQUAL "")
 
+OPTION(BUILD_EXTRA_WARNINGS "extra warnings")
+
+# default to ON
+set(CMAKE_POSITION_INDEPENDENT_CODE ON CACHE BOOL "Default value for ``POSITION_INDEPENDENT_CODE`` of targets.")
+
+IF(BUILD_EXTRA_WARNINGS)
+	SET(WARN_CFLAGS "-g -O2 -g2 -Wall -Wmissing-declarations -Wdeclaration-after-statement -Wcast-align -Wsign-compare -Wnested-externs -Wpointer-arith -Wmissing-prototypes -Wshadow -Wno-pointer-sign -Wformat-security")
+	SET(WARN_LDFLAGS "-g -O2 -g2 -Wall -Wl,--as-needed -Wl,--no-undefined")
+	# -Wl,--as-needed
+	# -Werror -Wbad-function-cast -Wmissing-prototypes
+ELSE(BUILD_EXTRA_WARNINGS)
+	SET(WARN_CFLAGS "")
+	SET(WARN_LDFLAGS "")
+ENDIF(BUILD_EXTRA_WARNINGS)
+
 
 # libev
 CHECK_INCLUDE_FILES(ev.h HAVE_EV_H)
@@ -61,7 +76,16 @@ INCLUDE_DIRECTORIES(${CMAKE_CURRENT_BINARY_DIR} ${CMAKE_CURRENT_SOURCE_DIR})
 
 add_executable(multiwatch ${MAIN_SOURCE})
 
-ADD_TARGET_PROPERTIES(multiwatch COMPILE_FLAGS "-std=gnu99 -Wall -g -Wshadow -W -pedantic -fPIC -D_GNU_SOURCE")
+IF(CMAKE_COMPILER_IS_GNUCC)
+	SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -std=gnu99 -Wall -g -Wshadow -W -pedantic")
+	SET(CMAKE_C_FLAGS_RELEASE        "${CMAKE_C_FLAGS_RELEASE}     -O2")
+	SET(CMAKE_C_FLAGS_DEBUG          "${CMAKE_C_FLAGS_DEBUG}       -O0")
+	SET(CMAKE_C_FLAGS_RELWITHDEBINFO "${CMAKE_C_FLAGS_WITHDEBINFO} -O2")
+	ADD_DEFINITIONS(-D_GNU_SOURCE)
+ENDIF(CMAKE_COMPILER_IS_GNUCC)
+
+ADD_TARGET_PROPERTIES(multiwatch COMPILE_FLAGS "${WARN_CFLAGS}")
+TARGET_LINK_LIBRARIES(multiwatch ${WARN_LDFLAGS})
 
 # libev
 TARGET_LINK_LIBRARIES(multiwatch "${EV_LIBRARIES}")

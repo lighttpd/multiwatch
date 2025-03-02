@@ -1,0 +1,1 @@
+option('extra-warnings', type : 'boolean', value : true, description : 'Build with extra warnings enabled')

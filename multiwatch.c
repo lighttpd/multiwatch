@@ -227,6 +227,7 @@ static const GOptionEntry entries[] = {
 int main(int argc, char **argv) {
 	GOptionContext *context;
 	GError *error = NULL;
+	data *d = NULL;
 	gint res;
 
 	context = g_option_context_new("<application> [app arguments]");
@@ -264,7 +265,7 @@ int main(int argc, char **argv) {
 		return -5;
 	}
 
-	data *d = g_slice_new0(data);
+	d = g_slice_new0(data);
 	d->children = (child*) g_slice_alloc0(sizeof(child) * opts.forks);
 	d->running = 0;
 	d->shutdown = FALSE;
